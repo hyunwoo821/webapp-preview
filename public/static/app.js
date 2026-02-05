@@ -1,0 +1,670 @@
+// 전역 상태 관리
+const state = {
+    currentStep: 1,
+    data: null,
+    selectedItems: [], // 선택된 항목코드들
+    selectedCareer: null, // 선택된 경력 (표3 데이터)
+    modifiedFields: {}, // 수정된 필드들
+    matchedRule: null, // 매칭된 규칙 (표2 데이터)
+    uploadedFiles: {}, // 업로드된 파일들
+    submissionData: null // 제출 데이터
+};
+
+// 초기화
+async function init() {
+    try {
+        const response = await axios.get('/data.json');
+        state.data = response.data;
+        console.log('데이터 로드 완료:', state.data);
+        renderStep(1);
+        setupEventListeners();
+    } catch (error) {
+        console.error('데이터 로드 실패:', error);
+        showModal('<p class="text-red-600">데이터를 로드하는데 실패했습니다.</p>');
+    }
+}
+
+// 이벤트 리스너 설정
+function setupEventListeners() {
+    document.getElementById('btn-next').addEventListener('click', handleNext);
+    document.getElementById('btn-prev').addEventListener('click', handlePrev);
+    document.getElementById('modal-close').addEventListener('click', closeModal);
+}
+
+// 다음 버튼 핸들러
+function handleNext() {
+    if (state.currentStep === 1) {
+        // Step1 검증: 항목이 선택되었는지
+        const checkboxes = document.querySelectorAll('input[name="item-select"]:checked');
+        if (checkboxes.length === 0) {
+            showModal('<p class="text-red-600">최소 1개 이상의 수정항목을 선택해주세요.</p>');
+            return;
+        }
+        state.selectedItems = Array.from(checkboxes).map(cb => cb.value);
+        console.log('선택된 항목:', state.selectedItems);
+    } else if (state.currentStep === 2) {
+        // Step2 검증: 경력이 선택되었는지
+        if (!state.selectedCareer) {
+            showModal('<p class="text-red-600">수정할 경력을 선택해주세요.</p>');
+            return;
+        }
+    } else if (state.currentStep === 3) {
+        // Step3 검증: 수정사항이 입력되었는지
+        const hasModifications = Object.keys(state.modifiedFields).length > 0;
+        if (!hasModifications) {
+            showModal('<p class="text-red-600">최소 1개 이상의 항목을 수정해주세요.</p>');
+            return;
+        }
+        // 규칙 분석 실행
+        analyzeRules();
+    } else if (state.currentStep === 4) {
+        // Step4: 서류 업로드 검증 (현재는 스킵 가능)
+        // 제출 데이터 준비
+        prepareSubmissionData();
+    }
+
+    // 다음 단계로 이동
+    if (state.currentStep < 5) {
+        state.currentStep++;
+        renderStep(state.currentStep);
+    }
+}
+
+// 이전 버튼 핸들러
+function handlePrev() {
+    if (state.currentStep > 1) {
+        state.currentStep--;
+        renderStep(state.currentStep);
+    }
+}
+
+// 단계별 렌더링
+function renderStep(step) {
+    const content = document.getElementById('app-content');
+    const prevBtn = document.getElementById('btn-prev');
+    const nextBtn = document.getElementById('btn-next');
+
+    // 단계 표시기 업데이트
+    for (let i = 1; i <= 5; i++) {
+        const indicator = document.getElementById(`step-indicator-${i}`);
+        indicator.classList.remove('active', 'completed');
+        if (i === step) {
+            indicator.classList.add('active');
+        } else if (i < step) {
+            indicator.classList.add('completed');
+        }
+    }
+
+    // 버튼 표시/숨김
+    prevBtn.classList.toggle('hidden', step === 1);
+    
+    if (step === 5) {
+        nextBtn.innerHTML = '<i class="fas fa-check mr-2"></i>제출';
+    } else {
+        nextBtn.innerHTML = '다음<i class="fas fa-arrow-right ml-2"></i>';
+    }
+
+    // 단계별 컨텐츠 렌더링
+    switch (step) {
+        case 1:
+            renderStep1(content);
+            break;
+        case 2:
+            renderStep2(content);
+            break;
+        case 3:
+            renderStep3(content);
+            break;
+        case 4:
+            renderStep4(content);
+            break;
+        case 5:
+            renderStep5(content);
+            break;
+    }
+}
+
+// Step1: 수정항목 선택
+function renderStep1(content) {
+    const items = state.data.table1;
+    
+    let html = `
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">
+            <i class="fas fa-list-check mr-2 text-blue-600"></i>
+            수정할 항목을 선택하세요
+        </h2>
+        <p class="text-gray-600 mb-6">변경하고자 하는 항목을 체크박스로 선택해주세요. (복수 선택 가능)</p>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    `;
+
+    items.forEach(item => {
+        const isChecked = state.selectedItems.includes(item.항목코드);
+        html += `
+            <label class="career-card border-2 rounded-lg p-4 cursor-pointer hover:shadow-md ${isChecked ? 'selected' : 'border-gray-200'}">
+                <div class="flex items-center">
+                    <input type="checkbox" name="item-select" value="${item.항목코드}" 
+                        class="w-5 h-5 text-blue-600 mr-3" ${isChecked ? 'checked' : ''}>
+                    <div class="flex-1">
+                        <div class="font-semibold text-gray-800">${item.항목명}</div>
+                        <div class="text-sm text-gray-500">${item.항목코드}</div>
+                    </div>
+                </div>
+            </label>
+        `;
+    });
+
+    html += `</div>`;
+    content.innerHTML = html;
+
+    // 체크박스 이벤트 리스너
+    document.querySelectorAll('input[name="item-select"]').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const label = e.target.closest('label');
+            if (e.target.checked) {
+                label.classList.add('selected');
+            } else {
+                label.classList.remove('selected');
+            }
+        });
+    });
+}
+
+// Step2: 수정 경력 선택
+function renderStep2(content) {
+    const careers = state.data.table3;
+    const selectedItemNames = state.selectedItems.map(code => {
+        const item = state.data.table1.find(i => i.항목코드 === code);
+        return item ? item.항목명 : code;
+    }).join(', ');
+
+    let html = `
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">
+            <i class="fas fa-briefcase mr-2 text-blue-600"></i>
+            수정할 경력을 선택하세요
+        </h2>
+        <p class="text-gray-600 mb-2">선택한 수정항목: <strong class="text-blue-600">${selectedItemNames}</strong></p>
+        <p class="text-gray-500 mb-6 text-sm">기존에 신고된 경력 중 하나를 선택해주세요.</p>
+        
+        <div class="space-y-4">
+    `;
+
+    careers.forEach((career, index) => {
+        const isSelected = state.selectedCareer && state.selectedCareer.케이스ID === career.케이스ID;
+        
+        // 케이스ID를 제외한 필드들을 4줄로 표시
+        const fields = Object.entries(career).filter(([key]) => key !== '케이스ID');
+        const fieldsPerRow = Math.ceil(fields.length / 4);
+        
+        let rows = [];
+        for (let i = 0; i < 4; i++) {
+            const rowFields = fields.slice(i * fieldsPerRow, (i + 1) * fieldsPerRow);
+            if (rowFields.length > 0) {
+                rows.push(rowFields);
+            }
+        }
+
+        html += `
+            <div class="career-card border-2 rounded-lg p-4 cursor-pointer ${isSelected ? 'selected' : 'border-gray-200'}" 
+                onclick="selectCareer(${index})">
+                <div class="flex items-start mb-3">
+                    <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center mr-3 mt-1 
+                        ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}">
+                        ${isSelected ? '<i class="fas fa-check text-white text-xs"></i>' : ''}
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-lg text-gray-800 mb-2">경력 #${index + 1}</h3>
+        `;
+
+        rows.forEach(row => {
+            html += `<div class="grid grid-cols-2 md:grid-cols-${Math.min(row.length, 3)} gap-2 mb-2 text-sm">`;
+            row.forEach(([key, value]) => {
+                const displayValue = value || '-';
+                html += `
+                    <div>
+                        <span class="text-gray-500">${key}:</span>
+                        <span class="text-gray-800 font-medium ml-1">${displayValue}</span>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+        });
+
+        html += `
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+    content.innerHTML = html;
+}
+
+// 경력 선택 함수
+function selectCareer(index) {
+    state.selectedCareer = state.data.table3[index];
+    console.log('선택된 경력:', state.selectedCareer);
+    renderStep(2); // 화면 다시 그리기
+}
+
+// Step3: 수정사항 입력
+function renderStep3(content) {
+    const career = state.selectedCareer;
+    const selectedItemCodes = state.selectedItems;
+    
+    // 선택된 항목에 해당하는 필드명 찾기
+    const editableFields = selectedItemCodes.map(code => {
+        const item = state.data.table1.find(i => i.항목코드 === code);
+        return item ? item.항목명 : code;
+    });
+
+    let html = `
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">
+            <i class="fas fa-pen-to-square mr-2 text-blue-600"></i>
+            수정할 내용을 입력하세요
+        </h2>
+        <p class="text-gray-600 mb-6">좌측에는 기존 정보가, 우측에는 수정 가능한 항목이 표시됩니다.</p>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 좌측: 기존 정보 -->
+            <div class="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <h3 class="font-bold text-lg mb-4 text-gray-700">
+                    <i class="fas fa-file-lines mr-2"></i>기존 신고 내용
+                </h3>
+                <div class="space-y-3">
+    `;
+
+    Object.entries(career).forEach(([key, value]) => {
+        if (key !== '케이스ID') {
+            const displayValue = value || '-';
+            html += `
+                <div class="flex border-b border-gray-200 pb-2">
+                    <div class="w-1/3 text-gray-600 text-sm font-medium">${key}</div>
+                    <div class="w-2/3 text-gray-800">${displayValue}</div>
+                </div>
+            `;
+        }
+    });
+
+    html += `
+                </div>
+            </div>
+
+            <!-- 우측: 수정 입력 -->
+            <div class="bg-blue-50 rounded-lg p-6 border border-blue-200">
+                <h3 class="font-bold text-lg mb-4 text-gray-700">
+                    <i class="fas fa-edit mr-2 text-blue-600"></i>수정할 항목
+                </h3>
+                <form id="edit-form" class="space-y-4">
+    `;
+
+    Object.entries(career).forEach(([key, value]) => {
+        if (key !== '케이스ID') {
+            const isEditable = editableFields.some(field => key.includes(field) || field.includes(key));
+            const currentValue = state.modifiedFields[key] !== undefined ? state.modifiedFields[key] : value || '';
+            
+            html += `
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">${key}</label>
+                    <input type="text" 
+                        name="${key}" 
+                        value="${currentValue}"
+                        class="w-full px-3 py-2 border rounded-lg ${isEditable ? 'bg-white border-blue-300 focus:ring-2 focus:ring-blue-500' : 'bg-gray-100 border-gray-300 cursor-not-allowed'}"
+                        ${isEditable ? '' : 'readonly'}
+                        placeholder="${isEditable ? '수정할 내용을 입력하세요' : '수정 불가'}">
+                </div>
+            `;
+        }
+    });
+
+    html += `
+                </form>
+                <button onclick="saveModifications()" class="mt-6 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                    <i class="fas fa-save mr-2"></i>수정 내용 저장
+                </button>
+            </div>
+        </div>
+    `;
+
+    content.innerHTML = html;
+}
+
+// 수정 내용 저장
+function saveModifications() {
+    const form = document.getElementById('edit-form');
+    const formData = new FormData(form);
+    
+    state.modifiedFields = {};
+    let hasChanges = false;
+
+    for (let [key, value] of formData.entries()) {
+        const originalValue = state.selectedCareer[key] || '';
+        if (value !== originalValue) {
+            state.modifiedFields[key] = value;
+            hasChanges = true;
+        }
+    }
+
+    if (!hasChanges) {
+        showModal('<p class="text-yellow-600">변경된 항목이 없습니다.</p>');
+        return;
+    }
+
+    console.log('수정된 필드:', state.modifiedFields);
+    showModal('<p class="text-green-600"><i class="fas fa-check-circle mr-2"></i>수정 내용이 저장되었습니다!</p>');
+}
+
+// Step3에서 규칙 분석
+function analyzeRules() {
+    const rules = state.data.table2;
+    const career = state.selectedCareer;
+    const modifications = state.modifiedFields;
+
+    console.log('규칙 분석 시작:', { career, modifications });
+
+    // 선택된 항목코드와 일치하는 규칙 찾기
+    let matchedRule = null;
+
+    for (let rule of rules) {
+        // 항목코드가 일치하는지 확인
+        if (state.selectedItems.includes(rule.항목코드)) {
+            // 조건 평가 (간단한 구현)
+            // 실제로는 조건을 파싱하고 평가해야 하지만, 여기서는 케이스ID로 매칭
+            if (rule.케이스ID === career.케이스ID) {
+                matchedRule = rule;
+                break;
+            }
+        }
+    }
+
+    // 만약 케이스ID로 매칭이 안되면, 첫 번째 매칭되는 항목코드 규칙 사용
+    if (!matchedRule) {
+        matchedRule = rules.find(rule => state.selectedItems.includes(rule.항목코드));
+    }
+
+    state.matchedRule = matchedRule;
+    console.log('매칭된 규칙:', matchedRule);
+}
+
+// Step4: 서류 업로드
+function renderStep4(content) {
+    const rule = state.matchedRule;
+
+    let html = `
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">
+            <i class="fas fa-upload mr-2 text-blue-600"></i>
+            필수 서류를 업로드하세요
+        </h2>
+    `;
+
+    if (!rule) {
+        html += `
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <p class="text-yellow-800"><i class="fas fa-exclamation-triangle mr-2"></i>매칭되는 규칙이 없습니다. 다음 단계로 진행합니다.</p>
+            </div>
+        `;
+    } else {
+        html += `
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h3 class="font-bold text-gray-800 mb-2">처리 유형</h3>
+                <p class="text-blue-800 text-lg">${rule.처리유형결정}</p>
+            </div>
+
+            <h3 class="font-bold text-lg mb-4 text-gray-700">필수 서류 목록</h3>
+            <div class="space-y-4">
+        `;
+
+        // 필수서류 필드들 찾기
+        for (let i = 1; i <= 4; i++) {
+            const docField = `필수서류${i}`;
+            const docName = rule[docField];
+            
+            if (docName && docName.trim() !== '') {
+                const fileId = `file-${i}`;
+                const uploadedFile = state.uploadedFiles[docName];
+
+                html += `
+                    <div class="border border-gray-300 rounded-lg p-4">
+                        <label class="block font-medium text-gray-700 mb-2">
+                            ${i}. ${docName}
+                        </label>
+                        <div class="flex items-center gap-3">
+                            <input type="file" 
+                                id="${fileId}" 
+                                class="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                onchange="handleFileUpload('${docName}', '${fileId}')">
+                            <button onclick="removeFile('${docName}', '${fileId}')" 
+                                class="px-3 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 ${uploadedFile ? '' : 'hidden'}" 
+                                id="${fileId}-remove">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        <div id="${fileId}-name" class="mt-2 text-sm text-green-600 ${uploadedFile ? '' : 'hidden'}">
+                            <i class="fas fa-check-circle mr-1"></i>${uploadedFile ? uploadedFile.name : ''}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        html += `
+            </div>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-6">
+                <p class="text-sm text-yellow-800">
+                    <i class="fas fa-info-circle mr-2"></i>
+                    프로토타입에서는 파일 업로드 없이도 다음 단계로 진행할 수 있습니다.
+                </p>
+            </div>
+        `;
+    }
+
+    content.innerHTML = html;
+}
+
+// 파일 업로드 핸들러
+function handleFileUpload(docName, fileId) {
+    const input = document.getElementById(fileId);
+    const file = input.files[0];
+    
+    if (file) {
+        state.uploadedFiles[docName] = file;
+        document.getElementById(`${fileId}-name`).textContent = file.name;
+        document.getElementById(`${fileId}-name`).classList.remove('hidden');
+        document.getElementById(`${fileId}-remove`).classList.remove('hidden');
+        console.log('파일 업로드:', docName, file.name);
+    }
+}
+
+// 파일 삭제 핸들러
+function removeFile(docName, fileId) {
+    delete state.uploadedFiles[docName];
+    document.getElementById(fileId).value = '';
+    document.getElementById(`${fileId}-name`).classList.add('hidden');
+    document.getElementById(`${fileId}-remove`).classList.add('hidden');
+    console.log('파일 삭제:', docName);
+}
+
+// 제출 데이터 준비
+function prepareSubmissionData() {
+    state.submissionData = {
+        selectedItems: state.selectedItems,
+        selectedCareer: state.selectedCareer,
+        modifiedFields: state.modifiedFields,
+        matchedRule: state.matchedRule,
+        uploadedFiles: Object.keys(state.uploadedFiles).map(name => ({
+            name: name,
+            fileName: state.uploadedFiles[name].name
+        })),
+        timestamp: new Date().toISOString()
+    };
+
+    // 로컬 스토리지에 저장
+    localStorage.setItem('careerModification', JSON.stringify(state.submissionData));
+    console.log('제출 데이터 준비 완료:', state.submissionData);
+}
+
+// Step5: 요약 및 제출
+function renderStep5(content) {
+    const data = state.submissionData;
+
+    let html = `
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">
+            <i class="fas fa-clipboard-check mr-2 text-blue-600"></i>
+            제출 내용 확인
+        </h2>
+        <p class="text-gray-600 mb-6">아래 내용을 확인하신 후 제출 버튼을 클릭해주세요.</p>
+        
+        <!-- 수정 항목 -->
+        <div class="bg-white border border-gray-300 rounded-lg p-4 mb-4">
+            <h3 class="font-bold text-lg mb-2 text-gray-700">선택한 수정 항목</h3>
+            <div class="flex flex-wrap gap-2">
+    `;
+
+    data.selectedItems.forEach(code => {
+        const item = state.data.table1.find(i => i.항목코드 === code);
+        html += `
+            <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                ${item ? item.항목명 : code}
+            </span>
+        `;
+    });
+
+    html += `
+            </div>
+        </div>
+
+        <!-- 선택한 경력 -->
+        <div class="bg-white border border-gray-300 rounded-lg p-4 mb-4">
+            <h3 class="font-bold text-lg mb-2 text-gray-700">선택한 경력</h3>
+            <div class="text-sm text-gray-600">
+                근무처: <strong>${data.selectedCareer.근무처명 || '-'}</strong>, 
+                입사일: <strong>${data.selectedCareer.입사일 || '-'}</strong>, 
+                퇴사일: <strong>${data.selectedCareer.퇴사일 || '-'}</strong>
+            </div>
+        </div>
+
+        <!-- 수정 내용 -->
+        <div class="bg-white border border-gray-300 rounded-lg p-4 mb-4">
+            <h3 class="font-bold text-lg mb-2 text-gray-700">수정 내용</h3>
+            <div class="space-y-2">
+    `;
+
+    Object.entries(data.modifiedFields).forEach(([key, newValue]) => {
+        const oldValue = data.selectedCareer[key] || '-';
+        html += `
+            <div class="flex items-start text-sm">
+                <div class="w-1/3 text-gray-600 font-medium">${key}</div>
+                <div class="w-1/3">
+                    <span class="line-through text-red-500">${oldValue}</span>
+                </div>
+                <div class="w-1/3">
+                    <span class="text-green-600 font-semibold">${newValue}</span>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `
+            </div>
+        </div>
+
+        <!-- 처리 유형 및 필수 서류 -->
+    `;
+
+    if (data.matchedRule) {
+        html += `
+            <div class="bg-white border border-gray-300 rounded-lg p-4 mb-4">
+                <h3 class="font-bold text-lg mb-2 text-gray-700">처리 유형</h3>
+                <p class="text-blue-800 font-semibold">${data.matchedRule.처리유형결정}</p>
+            </div>
+
+            <div class="bg-white border border-gray-300 rounded-lg p-4 mb-4">
+                <h3 class="font-bold text-lg mb-2 text-gray-700">업로드한 서류</h3>
+        `;
+
+        if (data.uploadedFiles.length > 0) {
+            html += `<ul class="space-y-1">`;
+            data.uploadedFiles.forEach(file => {
+                html += `
+                    <li class="text-sm text-gray-700">
+                        <i class="fas fa-file-alt mr-2 text-blue-600"></i>
+                        ${file.name}: ${file.fileName}
+                    </li>
+                `;
+            });
+            html += `</ul>`;
+        } else {
+            html += `<p class="text-gray-500 text-sm">업로드된 파일이 없습니다.</p>`;
+        }
+
+        html += `</div>`;
+    }
+
+    html += `
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4 mt-6">
+            <p class="text-sm text-green-800">
+                <i class="fas fa-info-circle mr-2"></i>
+                제출 버튼을 클릭하면 신청이 완료됩니다.
+            </p>
+        </div>
+    `;
+
+    content.innerHTML = html;
+
+    // 제출 버튼 이벤트 변경
+    const nextBtn = document.getElementById('btn-next');
+    nextBtn.onclick = submitApplication;
+}
+
+// 제출 처리
+function submitApplication() {
+    console.log('제출 처리:', state.submissionData);
+    
+    showModal(`
+        <div class="text-center">
+            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-check text-3xl text-green-600"></i>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">제출 완료 (프로토타입)</h3>
+            <p class="text-gray-600">경력 수정 신청이 완료되었습니다.</p>
+            <p class="text-sm text-gray-500 mt-2">데이터는 로컬 스토리지에 저장되었습니다.</p>
+        </div>
+    `);
+
+    // 모달 닫기 후 초기화
+    document.getElementById('modal-close').onclick = () => {
+        closeModal();
+        resetApplication();
+    };
+}
+
+// 애플리케이션 초기화
+function resetApplication() {
+    state.currentStep = 1;
+    state.selectedItems = [];
+    state.selectedCareer = null;
+    state.modifiedFields = {};
+    state.matchedRule = null;
+    state.uploadedFiles = {};
+    state.submissionData = null;
+    
+    renderStep(1);
+    
+    // 버튼 이벤트 복원
+    document.getElementById('btn-next').onclick = handleNext;
+}
+
+// 모달 표시
+function showModal(content) {
+    document.getElementById('modal-content').innerHTML = content;
+    document.getElementById('modal').classList.remove('hidden');
+}
+
+// 모달 닫기
+function closeModal() {
+    document.getElementById('modal').classList.add('hidden');
+}
+
+// 페이지 로드 시 초기화
+document.addEventListener('DOMContentLoaded', init);
