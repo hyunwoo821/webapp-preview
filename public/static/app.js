@@ -258,6 +258,31 @@ function renderStep3(content) {
         const item = state.data.table1.find(i => i.항목코드 === code);
         return item ? item.항목명 : code;
     });
+    
+    // 필드명 매칭을 위한 키워드 추출 함수
+    function getFieldKeywords(itemName) {
+        const keywords = [];
+        // "직무·전문분야" -> ["직무", "전문"]
+        if (itemName.includes('·')) {
+            const parts = itemName.split('·');
+            parts.forEach(part => {
+                // "(수정)", "(취소)" 등 제거
+                const cleaned = part.replace(/\(.*?\)/g, '').trim();
+                if (cleaned) keywords.push(cleaned);
+            });
+        } else {
+            // 단일 필드명에서 괄호 제거
+            const cleaned = itemName.replace(/\(.*?\)/g, '').trim();
+            if (cleaned) keywords.push(cleaned);
+        }
+        return keywords;
+    }
+    
+    // 선택된 항목의 모든 키워드 수집
+    const allKeywords = [];
+    editableFields.forEach(field => {
+        allKeywords.push(...getFieldKeywords(field));
+    });
 
     let html = `
         <h2 class="text-2xl font-bold mb-4 text-gray-800">
@@ -301,7 +326,12 @@ function renderStep3(content) {
 
     Object.entries(career).forEach(([key, value]) => {
         if (key !== '케이스ID') {
-            const isEditable = editableFields.some(field => key.includes(field) || field.includes(key));
+            // 필드가 편집 가능한지 확인 (키워드 기반 매칭)
+            const isEditable = allKeywords.some(keyword => {
+                // 필드명에 키워드가 포함되어 있는지 확인
+                return key.includes(keyword);
+            });
+            
             const currentValue = state.modifiedFields[key] !== undefined ? state.modifiedFields[key] : value || '';
             
             html += `
