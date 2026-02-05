@@ -190,10 +190,11 @@ function renderStep2(content) {
     `;
 
     careers.forEach((career, index) => {
-        const isSelected = state.selectedCareer && state.selectedCareer.케이스ID === career.케이스ID;
+        // index 기반으로 선택 여부 판단 (케이스ID 제거됨)
+        const isSelected = state.selectedCareer && state.selectedCareer._index === index;
         
-        // 케이스ID를 제외한 필드들을 4줄로 표시
-        const fields = Object.entries(career).filter(([key]) => key !== '케이스ID');
+        // 모든 필드를 4줄로 표시
+        const fields = Object.entries(career);
         const fieldsPerRow = Math.ceil(fields.length / 4);
         
         let rows = [];
@@ -243,7 +244,7 @@ function renderStep2(content) {
 
 // 경력 선택 함수
 function selectCareer(index) {
-    state.selectedCareer = state.data.table3[index];
+    state.selectedCareer = { ...state.data.table3[index], _index: index };
     console.log('선택된 경력:', state.selectedCareer);
     renderStep(2); // 화면 다시 그리기
 }
@@ -301,15 +302,18 @@ function renderStep3(content) {
     `;
 
     Object.entries(career).forEach(([key, value]) => {
-        if (key !== '케이스ID') {
-            const displayValue = value || '-';
-            html += `
-                <div class="flex border-b border-gray-200 pb-2">
-                    <div class="w-1/3 text-gray-600 text-sm font-medium">${key}</div>
-                    <div class="w-2/3 text-gray-800">${displayValue}</div>
-                </div>
-            `;
+        // _index는 내부 식별자이므로 제외
+        if (key === '_index') {
+            return;
         }
+        
+        const displayValue = value || '-';
+        html += `
+            <div class="flex border-b border-gray-200 pb-2">
+                <div class="w-1/3 text-gray-600 text-sm font-medium">${key}</div>
+                <div class="w-2/3 text-gray-800">${displayValue}</div>
+            </div>
+        `;
     });
 
     html += `
@@ -325,27 +329,33 @@ function renderStep3(content) {
     `;
 
     Object.entries(career).forEach(([key, value]) => {
-        if (key !== '케이스ID') {
-            // 필드가 편집 가능한지 확인 (키워드 기반 매칭)
-            const isEditable = allKeywords.some(keyword => {
-                // 필드명에 키워드가 포함되어 있는지 확인
-                return key.includes(keyword);
-            });
-            
-            const currentValue = state.modifiedFields[key] !== undefined ? state.modifiedFields[key] : value || '';
-            
-            html += `
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">${key}</label>
-                    <input type="text" 
-                        name="${key}" 
-                        value="${currentValue}"
-                        class="w-full px-3 py-2 border rounded-lg ${isEditable ? 'bg-white border-blue-300 focus:ring-2 focus:ring-blue-500' : 'bg-gray-100 border-gray-300 cursor-not-allowed'}"
-                        ${isEditable ? '' : 'readonly'}
-                        placeholder="${isEditable ? '수정할 내용을 입력하세요' : '수정 불가'}">
-                </div>
-            `;
+        // _index는 내부 식별자이므로 제외
+        if (key === '_index') {
+            return;
         }
+        
+        // 필드가 편집 가능한지 확인 (키워드 기반 매칭)
+        const isEditable = allKeywords.some(keyword => {
+            // 필드명에 키워드가 포함되어 있는지 확인
+            return key.includes(keyword);
+        });
+        
+        // 수정 항목은 빈값으로 시작, 비수정 항목은 기존 값 표시
+        const currentValue = state.modifiedFields[key] !== undefined 
+            ? state.modifiedFields[key] 
+            : (isEditable ? '' : (value || ''));
+        
+        html += `
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">${key}</label>
+                <input type="text" 
+                    name="${key}" 
+                    value="${currentValue}"
+                    class="w-full px-3 py-2 border rounded-lg ${isEditable ? 'bg-white border-blue-300 focus:ring-2 focus:ring-blue-500' : 'bg-gray-100 border-gray-300 cursor-not-allowed'}"
+                    ${isEditable ? '' : 'readonly'}
+                    placeholder="${isEditable ? '수정할 내용을 입력하세요' : '수정 불가'}">
+            </div>
+        `;
     });
 
     html += `
@@ -369,15 +379,19 @@ function saveModifications() {
     let hasChanges = false;
 
     for (let [key, value] of formData.entries()) {
+        // _index는 제외
+        if (key === '_index') continue;
+        
         const originalValue = state.selectedCareer[key] || '';
-        if (value !== originalValue) {
+        // 빈 값이 아니고, 원래 값과 다르면 수정된 것으로 간주
+        if (value && value.trim() !== '' && value !== originalValue) {
             state.modifiedFields[key] = value;
             hasChanges = true;
         }
     }
 
     if (!hasChanges) {
-        showModal('<p class="text-yellow-600">변경된 항목이 없습니다.</p>');
+        showModal('<p class="text-yellow-600">변경된 항목이 없습니다. 수정할 내용을 입력해주세요.</p>');
         return;
     }
 
@@ -396,20 +410,42 @@ function analyzeRules() {
     // 선택된 항목코드와 일치하는 규칙 찾기
     let matchedRule = null;
 
-    for (let rule of rules) {
-        // 항목코드가 일치하는지 확인
-        if (state.selectedItems.includes(rule.항목코드)) {
-            // 조건 평가 (간단한 구현)
-            // 실제로는 조건을 파싱하고 평가해야 하지만, 여기서는 케이스ID로 매칭
-            if (rule.케이스ID === career.케이스ID) {
+    // 각 항목코드에 대해 매칭되는 규칙 찾기
+    for (let itemCode of state.selectedItems) {
+        // 해당 항목코드의 규칙들 필터링
+        const candidateRules = rules.filter(rule => rule.항목코드 === itemCode);
+        
+        if (candidateRules.length === 0) continue;
+        
+        // 여러 규칙이 있으면 조건 평가
+        for (let rule of candidateRules) {
+            // 조건이 있으면 평가 (현재는 단순 매칭)
+            // 실제로는 rule.조건을 파싱하고 career와 modifications를 비교해야 함
+            
+            // 예시: 비교값과 수정값을 확인
+            let conditionMet = true;
+            
+            // 비교값이 있으면 해당 필드를 확인
+            if (rule.비교값1) {
+                const fieldName = rule.비교값1;
+                // 수정된 필드 중에 해당 필드가 있는지 확인
+                const hasModification = Object.keys(modifications).some(key => 
+                    key.includes(fieldName) || fieldName.includes(key)
+                );
+                if (!hasModification) conditionMet = false;
+            }
+            
+            if (conditionMet) {
                 matchedRule = rule;
                 break;
             }
         }
+        
+        if (matchedRule) break;
     }
 
-    // 만약 케이스ID로 매칭이 안되면, 첫 번째 매칭되는 항목코드 규칙 사용
-    if (!matchedRule) {
+    // 매칭된 규칙이 없으면 첫 번째 규칙 사용
+    if (!matchedRule && state.selectedItems.length > 0) {
         matchedRule = rules.find(rule => state.selectedItems.includes(rule.항목코드));
     }
 
