@@ -409,6 +409,7 @@ function analyzeRules() {
 
     // 선택된 항목코드와 일치하는 규칙 찾기
     let matchedRule = null;
+    let highestPriority = -1;
 
     // 각 항목코드에 대해 매칭되는 규칙 찾기
     for (let itemCode of state.selectedItems) {
@@ -419,29 +420,15 @@ function analyzeRules() {
         
         // 여러 규칙이 있으면 조건 평가
         for (let rule of candidateRules) {
-            // 조건이 있으면 평가 (현재는 단순 매칭)
-            // 실제로는 rule.조건을 파싱하고 career와 modifications를 비교해야 함
+            const conditionResult = evaluateCondition(rule, career, modifications);
             
-            // 예시: 비교값과 수정값을 확인
-            let conditionMet = true;
+            console.log(`규칙 ${rule.케이스ID} 평가:`, conditionResult);
             
-            // 비교값이 있으면 해당 필드를 확인
-            if (rule.비교값1) {
-                const fieldName = rule.비교값1;
-                // 수정된 필드 중에 해당 필드가 있는지 확인
-                const hasModification = Object.keys(modifications).some(key => 
-                    key.includes(fieldName) || fieldName.includes(key)
-                );
-                if (!hasModification) conditionMet = false;
-            }
-            
-            if (conditionMet) {
+            if (conditionResult.matched && conditionResult.priority > highestPriority) {
                 matchedRule = rule;
-                break;
+                highestPriority = conditionResult.priority;
             }
         }
-        
-        if (matchedRule) break;
     }
 
     // 매칭된 규칙이 없으면 첫 번째 규칙 사용
@@ -450,7 +437,145 @@ function analyzeRules() {
     }
 
     state.matchedRule = matchedRule;
-    console.log('매칭된 규칙:', matchedRule);
+    console.log('최종 매칭된 규칙:', matchedRule);
+}
+
+// 조건 평가 함수
+function evaluateCondition(rule, career, modifications) {
+    const condition = rule.조건;
+    
+    // 조건이 없으면 기본 매칭
+    if (!condition) {
+        return { matched: true, priority: 0 };
+    }
+
+    // 비교값들 추출
+    const 비교값1 = rule.비교값1; // 예: "직무분야"
+    const 비교값2 = rule.비교값2; // 예: "수정 직무분야"
+    const 비교값3 = rule.비교값3; // 예: "전문분야"
+    const 비교값4 = rule.비교값4; // 예: "수정 전문분야"
+
+    // 실제 값 가져오기
+    const 기존_직무분야 = career['직무분야'] || '';
+    const 수정_직무분야 = modifications['직무분야'] || '';
+    const 기존_전문분야 = career['전문분야'] || '';
+    const 수정_전문분야 = modifications['전문분야'] || '';
+    const 기존_담당업무 = career['담당업무'] || '';
+    const 수정_담당업무 = modifications['담당업무'] || '';
+    const 보유건설업 = career['보유건설업'] || '';
+    const 책임정도 = career['책임정도'] || '';
+    const 종료신고일 = career['종료신고일'] || '';
+    const 근무처명 = career['근무처명'] || '';
+
+    console.log('조건 평가 데이터:', {
+        기존_직무분야, 수정_직무분야,
+        기존_전문분야, 수정_전문분야,
+        조건: condition
+    });
+
+    // C1201: 국토개발→조경/토목/도시교통 또는 자연토양→자연환경/토양환경
+    if (rule.케이스ID === 'C1201') {
+        const cond1 = 기존_직무분야 === '국토개발' && 
+                     ['조경', '토목', '도시·교통'].includes(수정_직무분야);
+        const cond2 = 기존_전문분야 === '자연·토양' && 
+                     ['자연환경', '토양환경'].includes(수정_전문분야);
+        if (cond1 || cond2) {
+            return { matched: true, priority: 10 };
+        }
+    }
+
+    // C1202: 직무분야가 다르거나 전문분야가 다른 경우 (일반적인 변경) - 심의
+    if (rule.케이스ID === 'C1202') {
+        const 직무분야_다름 = 수정_직무분야 && 기존_직무분야 !== 수정_직무분야;
+        const 전문분야_다름 = 수정_전문분야 && 기존_전문분야 !== 수정_전문분야;
+        const 환경토양 = 수정_직무분야 === '환경' && 수정_전문분야 === '토양환경';
+        
+        if (직무분야_다름 || 전문분야_다름 || 환경토양) {
+            return { matched: true, priority: 5 };
+        }
+    }
+
+    // C1203: 건축/건축기계설비 ↔ 기계/공조냉동및설비
+    if (rule.케이스ID === 'C1203') {
+        const cond1 = 기존_직무분야 === '건축' && 기존_전문분야 === '건축기계설비' &&
+                     수정_직무분야 === '기계' && 수정_전문분야 === '공조냉동및설비';
+        const cond2 = 기존_직무분야 === '기계' && 기존_전문분야 === '공조냉동및설비' &&
+                     수정_직무분야 === '건축' && 수정_전문분야 === '건축기계설비';
+        if (cond1 || cond2) {
+            return { matched: true, priority: 15 };
+        }
+    }
+
+    // C1204: 보유건설업에 해당하는 직무분야로 수정
+    if (rule.케이스ID === 'C1204') {
+        if (보유건설업 && 수정_직무분야) {
+            // 보유건설업과 직무분야 매칭 로직 (간단히 구현)
+            return { matched: true, priority: 8 };
+        }
+    }
+
+    // C1205: 품질/안전관리자 → 품질관리 전문분야
+    if (rule.케이스ID === 'C1205') {
+        const is품질안전관리자 = ['품질관리자', '안전관리자'].includes(책임정도);
+        const 기존_not품질관리 = !['토목품질관리', '건축품질관리'].includes(기존_전문분야);
+        const 수정_품질관리 = ['토목품질관리', '건축품질관리'].includes(수정_전문분야);
+        
+        if (is품질안전관리자 && 기존_not품질관리 && 수정_품질관리) {
+            return { matched: true, priority: 12 };
+        }
+    }
+
+    // C1206: 시험→품질관리, 전문분야→토목품질관리
+    if (rule.케이스ID === 'C1206') {
+        const cond = 기존_담당업무 === '시험' && 
+                    기존_전문분야 !== '토목품질관리' &&
+                    수정_담당업무 === '품질관리' && 
+                    수정_전문분야 === '토목품질관리';
+        if (cond) {
+            return { matched: true, priority: 12 };
+        }
+    }
+
+    // C1207: 건축구조→건축계획설계 (종료일 ≤ 2010.02.02)
+    if (rule.케이스ID === 'C1207') {
+        const cond1 = 기존_전문분야 === '건축구조' && 수정_전문분야 === '건축계획·설계';
+        const cond2 = 종료신고일 && 종료신고일 <= '2010.02.02';
+        if (cond1 && cond2) {
+            return { matched: true, priority: 15 };
+        }
+    }
+
+    // C1208: 건축구조→건축계획설계 (종료일 > 2010.02.02)
+    if (rule.케이스ID === 'C1208') {
+        const cond1 = 기존_전문분야 === '건축구조' && 수정_전문분야 === '건축계획·설계';
+        const cond2 = 종료신고일 && 종료신고일 > '2010.02.02';
+        if (cond1 && cond2) {
+            return { matched: true, priority: 15 };
+        }
+    }
+
+    // C1209: 측량및지형공간정보→지적 (한국국토정보공사)
+    if (rule.케이스ID === 'C1209') {
+        const cond = 기존_전문분야 === '측량및지형공간정보' && 
+                    수정_전문분야 === '지적' &&
+                    근무처명 && 근무처명.includes('한국국토정보공사');
+        if (cond) {
+            return { matched: true, priority: 15 };
+        }
+    }
+
+    // C1210: 일반분야→시공분야 (보유건설업 있음)
+    if (rule.케이스ID === 'C1210') {
+        const 기존_not시공 = !['건축시공', '토목시공'].includes(기존_전문분야);
+        const 수정_시공 = ['건축시공', '토목시공'].includes(수정_전문분야);
+        const has보유건설업 = 보유건설업 && 보유건설업.trim() !== '';
+        
+        if (기존_not시공 && 수정_시공 && has보유건설업) {
+            return { matched: true, priority: 12 };
+        }
+    }
+
+    return { matched: false, priority: 0 };
 }
 
 // Step4: 서류 업로드
