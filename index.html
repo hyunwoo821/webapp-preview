@@ -5,80 +5,21 @@
   <title>경력 수정 프로토타입</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- Tailwind (커스텀 설정 포함) -->
-  <script>
-    tailwind = {
-      theme: {
-        extend: {
-          colors: {
-            primary: '#2563eb',
-          },
-        },
-      },
-    }
-  </script>
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Font Awesome -->
+  <!-- 아이콘용 (app.js에서 fas 클래스 사용) -->
   <link
     rel="stylesheet"
     href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
   />
 
-  <!-- 🔥 app.js가 기대하는 커스텀 스타일 -->
-  <style>
-    body {
-      background-color: #f3f4f6;
-    }
-
-    /* step indicator */
-    .step-indicator {
-      width: 2.5rem;
-      height: 2.5rem;
-      border-radius: 9999px;
-      border: 2px solid #d1d5db;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 600;
-      color: #6b7280;
-    }
-    .step-indicator.active {
-      background-color: #2563eb;
-      border-color: #2563eb;
-      color: white;
-    }
-    .step-indicator.completed {
-      background-color: #22c55e;
-      border-color: #22c55e;
-      color: white;
-    }
-
-    /* 카드 */
-    .career-card {
-      transition: all 0.2s ease;
-      background: white;
-    }
-    .career-card:hover {
-      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-    }
-    .career-card.selected {
-      border-color: #2563eb !important;
-      background-color: #eff6ff;
-    }
-
-    /* util */
-    .hidden {
-      display: none !important;
-    }
-  </style>
+  <!-- Tailwind CDN (class 이름들 사용 중) -->
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
+<body class="bg-gray-100">
 
-<body class="min-h-screen">
+  <!-- 전체 레이아웃 -->
+  <div class="max-w-5xl mx-auto p-6 bg-white mt-10 rounded-lg shadow">
 
-  <div class="max-w-5xl mx-auto p-6 bg-white mt-10 rounded-xl shadow-lg">
-
-    <!-- Step Indicator -->
+    <!-- 단계 표시기 -->
     <div class="flex justify-between mb-8">
       <div id="step-indicator-1" class="step-indicator">1</div>
       <div id="step-indicator-2" class="step-indicator">2</div>
@@ -87,36 +28,36 @@
       <div id="step-indicator-5" class="step-indicator">5</div>
     </div>
 
-    <!-- Dynamic Content -->
+    <!-- 단계별 콘텐츠 영역 -->
     <div id="app-content"></div>
 
-    <!-- Navigation Buttons -->
-    <div class="flex justify-between mt-10">
+    <!-- 이전 / 다음 버튼 -->
+    <div class="flex justify-between mt-8">
       <button
         id="btn-prev"
-        class="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 hidden"
+        class="px-4 py-2 bg-gray-300 rounded-lg hidden"
       >
         이전
       </button>
 
       <button
         id="btn-next"
-        class="px-6 py-2 rounded-lg bg-primary text-white hover:bg-blue-700 transition"
+        class="px-6 py-2 bg-blue-600 text-white rounded-lg"
       >
         다음
       </button>
     </div>
   </div>
 
-  <!-- Modal -->
+  <!-- 모달 -->
   <div
     id="modal"
     class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center hidden"
   >
-    <div class="bg-white rounded-xl p-6 max-w-md w-full relative shadow-lg">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full relative">
       <button
         id="modal-close"
-        class="absolute top-3 right-3 text-gray-400 hover:text-black"
+        class="absolute top-2 right-2 text-gray-500 hover:text-black"
       >
         ✕
       </button>
@@ -129,5 +70,6 @@
 
   <!-- app.js -->
   <script src="/static/app.js"></script>
+
 </body>
 </html>
