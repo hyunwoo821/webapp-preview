@@ -1,29 +1,75 @@
 <!DOCTYPE html>
 <html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <title>WebApp Preview</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  </head>
-  <body>
-    <!-- 화면이 그려질 기본 영역 -->
-    <div id="app"></div>
+<head>
+  <meta charset="UTF-8" />
+  <title>경력 수정 프로토타입</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- step / 화면 전환용 -->
-    <div id="stepContainer">
-      <div id="step-1" class="step"></div>
-      <div id="step-2" class="step"></div>
-      <div id="step-3" class="step"></div>
+  <!-- 아이콘용 (app.js에서 fas 클래스 사용) -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  />
+
+  <!-- Tailwind CDN (class 이름들 사용 중) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+
+  <!-- 전체 레이아웃 -->
+  <div class="max-w-5xl mx-auto p-6 bg-white mt-10 rounded-lg shadow">
+
+    <!-- 단계 표시기 -->
+    <div class="flex justify-between mb-8">
+      <div id="step-indicator-1" class="step-indicator">1</div>
+      <div id="step-indicator-2" class="step-indicator">2</div>
+      <div id="step-indicator-3" class="step-indicator">3</div>
+      <div id="step-indicator-4" class="step-indicator">4</div>
+      <div id="step-indicator-5" class="step-indicator">5</div>
     </div>
 
-    <!-- app.js에서 사용하는 요소들 -->
-    <div id="modal" style="display:none;"></div>
+    <!-- 단계별 콘텐츠 영역 -->
+    <div id="app-content"></div>
 
-    <!-- axios 먼저 -->
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- 이전 / 다음 버튼 -->
+    <div class="flex justify-between mt-8">
+      <button
+        id="btn-prev"
+        class="px-4 py-2 bg-gray-300 rounded-lg hidden"
+      >
+        이전
+      </button>
 
-    <!-- public/static/app.js 로드 -->
-    <script src="/static/app.js"></script>
+      <button
+        id="btn-next"
+        class="px-6 py-2 bg-blue-600 text-white rounded-lg"
+      >
+        다음
+      </button>
+    </div>
+  </div>
 
-  </body>
+  <!-- 모달 -->
+  <div
+    id="modal"
+    class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center hidden"
+  >
+    <div class="bg-white rounded-lg p-6 max-w-md w-full relative">
+      <button
+        id="modal-close"
+        class="absolute top-2 right-2 text-gray-500 hover:text-black"
+      >
+        ✕
+      </button>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+
+  <!-- axios -->
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+  <!-- app.js -->
+  <script src="/static/app.js"></script>
+
+</body>
 </html>
