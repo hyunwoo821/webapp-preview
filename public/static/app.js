@@ -1,11 +1,13 @@
 // 전역 상태 관리
 const state = {
-    currentStep: 1,
+    currentStep: 0,
     data: null,
+    selectedEngineer: null, //기술인 선택
     selectedItems: [], // 선택된 항목코드들
     selectedCareer: null, // 선택된 경력 (표3 데이터)
     modifiedFields: {}, // 수정된 필드들
     matchedRule: null, // 매칭된 규칙 (표2 데이터)
+    needsExtraDoc: false, // C1203 추가 서류 필요 여부
     uploadedFiles: {}, // 업로드된 파일들
     submissionData: null // 제출 데이터
 };
@@ -16,7 +18,7 @@ async function init() {
         const response = await axios.get('/data.json');
         state.data = response.data;
         console.log('데이터 로드 완료:', state.data);
-        renderStep(1);
+        renderStep(0);
         setupEventListeners();
     } catch (error) {
         console.error('데이터 로드 실패:', error);
@@ -33,6 +35,13 @@ function setupEventListeners() {
 
 // 다음 버튼 핸들러
 function handleNext() {
+    if (state.currentStep === 0) {
+        // Step0 검증: 항목이 선택되었는지
+        if (!state.selectedEngineer) {
+            showModal('<p class="text-red-600">기술인을 선택해주세요.</p>');
+            return;
+        }
+    }
     if (state.currentStep === 1) {
         // Step1 검증: 항목이 선택되었는지
         const checkboxes = document.querySelectorAll('input[name="item-select"]:checked');
@@ -49,6 +58,7 @@ function handleNext() {
             return;
         }
     } else if (state.currentStep === 3) {
+        
         // Step3 검증: 수정사항이 입력되었는지
         const hasModifications = Object.keys(state.modifiedFields).length > 0;
         if (!hasModifications) {
@@ -106,6 +116,9 @@ function renderStep(step) {
 
     // 단계별 컨텐츠 렌더링
     switch (step) {
+        case 0:
+            renderStep0(content);
+            break;
         case 1:
             renderStep1(content);
             break;
@@ -123,6 +136,43 @@ function renderStep(step) {
             break;
     }
 }
+// Step0 : 기술인 선택
+function renderStep0(content) {
+    const engineer = state.data.engineers;
+    const isSelected = state.selectedEngineer?.engineerId === engineer.engineerId;
+
+     const engineers = state.data.engineers;
+
+    let html = `
+        <h2 class="text-2xl font-bold mb-4">기술인 선택</h2>
+        <div class="space-y-4 max-w-md">
+    `;
+
+    engineers.forEach(engineer => {
+        const isSelected = state.selectedEngineer?.engineerId === engineer.engineerId;
+        html += `
+            <div class="career-card border-2 rounded-lg p-4 cursor-pointer
+                ${isSelected ? 'selected border-blue-600' : 'border-gray-200'}"
+                onclick="selectEngineer('${engineer.engineerId}')">
+                <div class="font-bold">${engineer.name}</div>
+                <div class="text-sm text-gray-500">ID: ${engineer.engineerId}</div>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+    content.innerHTML = html;
+}
+
+//기술인 선택 함수
+function selectEngineer(engineerId) {
+    state.selectedEngineer = state.data.engineers.find(
+        e => e.engineerId === engineerId
+    );
+    renderStep(0);
+}
+
+
 
 // Step1: 수정항목 선택
 function renderStep1(content) {
@@ -172,7 +222,10 @@ function renderStep1(content) {
 
 // Step2: 수정 경력 선택
 function renderStep2(content) {
-    const careers = state.data.table3;
+    const careers = state.data.table3.filter(
+        c => c.engineerId === state.selectedEngineer.engineerId
+    );
+    state.filteredCareers = careers;
     const selectedItemNames = state.selectedItems.map(code => {
         const item = state.data.table1.find(i => i.항목코드 === code);
         return item ? item.항목명 : code;
@@ -244,7 +297,11 @@ function renderStep2(content) {
 
 // 경력 선택 함수
 function selectCareer(index) {
-    state.selectedCareer = { ...state.data.table3[index], _index: index };
+    const career = state.filteredCareers[index];
+    state.selectedCareer = {
+        ...career,
+        _index: index
+    };
     console.log('선택된 경력:', state.selectedCareer);
     renderStep(2); // 화면 다시 그리기
 }
@@ -410,6 +467,7 @@ function analyzeRules() {
     // 선택된 항목코드와 일치하는 규칙 찾기
     let matchedRule = null;
     let highestPriority = -1;
+    let needsExtraDoc = false;
 
     // 각 항목코드에 대해 매칭되는 규칙 찾기
     for (let itemCode of state.selectedItems) {
@@ -427,6 +485,7 @@ function analyzeRules() {
             if (conditionResult.matched && conditionResult.priority > highestPriority) {
                 matchedRule = rule;
                 highestPriority = conditionResult.priority;
+                needsExtraDoc = conditionResult.needsExtraDoc || false;
             }
         }
     }
@@ -437,7 +496,9 @@ function analyzeRules() {
     }
 
     state.matchedRule = matchedRule;
+    state.needsExtraDoc = needsExtraDoc;
     console.log('최종 매칭된 규칙:', matchedRule);
+    console.log('추가 서류 필요:', needsExtraDoc);
 }
 
 // 조건 평가 함수
@@ -462,23 +523,125 @@ function evaluateCondition(rule, career, modifications) {
     const 수정_전문분야 = modifications['전문분야'] || '';
     const 기존_담당업무 = career['담당업무'] || '';
     const 수정_담당업무 = modifications['담당업무'] || '';
+    const 기존_참여사업명 = career['참여사업명'] || '';
+    const 수정_참여사업명 = modifications['참여사업명'] || '';
+    const 기존_발주자 = career['발주자'] || '';
+    const 수정_발주자 = modifications['발주자'] || '';
     const 보유건설업 = career['보유건설업'] || '';
     const 책임정도 = career['책임정도'] || '';
     const 종료신고일 = career['종료신고일'] || '';
     const 근무처명 = career['근무처명'] || '';
+    const 발주청소속 = career['발주청소속'] || '';
 
     console.log('조건 평가 데이터:', {
         기존_직무분야, 수정_직무분야,
         기존_전문분야, 수정_전문분야,
         조건: condition
     });
+    
+    // C0801: (참여사업명에 본사가 포함) and (수정 참여사업명에 본사가 미포함)
+    if (rule.케이스ID === 'C0801') {
+        const 참여사업조건 =
+            includesText(기존_참여사업명, '본사') &&
+            !includesText(수정_참여사업명, '본사');
+        
+        const 담당업무_수정안함 = modifications['담당업무'] === undefined;
+        const 담당업무_동일 =
+            modifications['담당업무'] !== undefined &&
+            기존_담당업무 === 수정_담당업무;
+        if (참여사업조건 && (담당업무_수정안함 || 담당업무_동일)) {
+            return { matched: true, priority: 10 };
+        }
+    }
 
+    // C0802: (발주청 소속 기술인) and (참여사업명에 본사가 포함) and (수정 참여사업명에 본사가 미포함)
+    if (rule.케이스ID === 'C0802') {
+        const 참여사업조건 =
+            수정_참여사업명 &&
+            includesText(기존_참여사업명, '본사') &&
+            !includesText(수정_참여사업명, '본사');
+
+        const 발주청조건 = 발주청소속 === 'O';
+
+        // 담당업무 조건 (C0801과 동일)
+        const 담당업무_수정안함 = modifications['담당업무'] === undefined;
+        const 담당업무_동일 =
+            modifications['담당업무'] !== undefined &&
+            기존_담당업무 === 수정_담당업무;
+
+        if (참여사업조건 && 발주청조건 && (담당업무_수정안함 || 담당업무_동일)) {
+            return { matched: true, priority: 12 };
+        }
+    }
+
+    // C0803: (수정 담당업무가 시공) and (참여사업명에 본사가 포함) and (수정 참여사업명에 본사가 미포함)
+    if (rule.케이스ID === 'C0803') {
+        const 참여사업명_다름 = 수정_참여사업명 && 기존_참여사업명 !== 수정_참여사업명;
+        const 참여사업1 = ['본사'].includes(기존_참여사업명);
+        const 참여사업2 = !['본사'].includes(수정_참여사업명);
+        const 담당업무1 = 수정_담당업무 === '시공'
+
+        if (참여사업명_다름 && 참여사업1 && 참여사업2 && 담당업무1) {
+            return { matched: true, priority: 12 };
+        }
+    }
+
+    // C0804: (수정 담당업무가 시공) and (참여사업명에 본사가 포함) and (수정 참여사업명에 본사가 미포함) and (책임정도가 현장대리인 또는 품질관리자 또는 안전관리자)
+    if (rule.케이스ID === 'C0804') {
+        const 참여사업명_다름 = 수정_참여사업명 && 기존_참여사업명 !== 수정_참여사업명;
+        const 참여사업1 = ['본사'].includes(기존_참여사업명);
+        const 참여사업2 = !['본사'].includes(수정_참여사업명);
+        const 담당업무1 = 수정_담당업무 === '시공'
+        const 책임정도1 = ['현장대리인', '품질관리자', '안전관리자'].includes(책임정도)
+
+        if (참여사업명_다름 && 참여사업1 && 참여사업2 && 담당업무1 && 책임정도1) {
+            return { matched: true, priority: 15 };
+        }
+    }
+
+    // C0805: (참여사업명과 수정 참여사업명이 다른 경우)
+    if (rule.케이스ID === 'C0805') {
+        const 참여사업명_다름 = 수정_참여사업명 && 기존_참여사업명 !== 수정_참여사업명;
+        
+        if (참여사업명_다름) {
+            return { matched: true, priority: 5 };
+        }
+    }
+    
+    // C0806: (참여사업명에 본사가 포함) and (수정 참여사업명에 본사가 포함) (예외케이스)
+    if (rule.케이스ID === 'C0806') {
+        const 참여사업조건 =
+            수정_참여사업명 &&
+            includesText(기존_참여사업명, '본사') &&
+            includesText(수정_참여사업명, '본사');
+
+        if (참여사업조건) {
+            return { matched: true, priority: 7 };
+        }
+    }
+    // C0901: 기관 통합 또는 상호변경 등으로 변경이 확인되는 경우
+    if (rule.케이스ID === 'C0901') {
+        const 발주자조건 = 기존_발주자 === '서울지하철공사' && 
+                        수정_발주자 === '서울메트로'
+
+        if (발주자조건) {
+            return { matched: true, priority: 10 };
+        }
+    }
+    // C0902: 공사계약서 또는 실적증명서로 발주자명을 변경하는 경우
+    if (rule.케이스ID === 'C0902') {
+        const 발주자_다름 = 수정_발주자 && 기존_발주자 !== 수정_발주자;
+        
+        if (발주자_다름) {
+            return { matched: true, priority: 7 };
+        }
+    }
     // C1201: 국토개발→조경/토목/도시교통 또는 자연토양→자연환경/토양환경
     if (rule.케이스ID === 'C1201') {
         const cond1 = 기존_직무분야 === '국토개발' && 
-                     ['조경', '토목', '도시·교통'].includes(수정_직무분야);
+                    ['조경', '토목', '도시·교통'].includes(수정_직무분야);
         const cond2 = 기존_전문분야 === '자연·토양' && 
-                     ['자연환경', '토양환경'].includes(수정_전문분야);
+                    ['자연환경', '토양환경'].includes(수정_전문분야);
         if (cond1 || cond2) {
             return { matched: true, priority: 10 };
         }
@@ -498,18 +661,23 @@ function evaluateCondition(rule, career, modifications) {
     // C1203: 건축/건축기계설비 ↔ 기계/공조냉동및설비
     if (rule.케이스ID === 'C1203') {
         const cond1 = 기존_직무분야 === '건축' && 기존_전문분야 === '건축기계설비' &&
-                     수정_직무분야 === '기계' && 수정_전문분야 === '공조냉동및설비';
+                    수정_직무분야 === '기계' && 수정_전문분야 === '공조냉동및설비';
         const cond2 = 기존_직무분야 === '기계' && 기존_전문분야 === '공조냉동및설비' &&
-                     수정_직무분야 === '건축' && 수정_전문분야 === '건축기계설비';
+                    수정_직무분야 === '건축' && 수정_전문분야 === '건축기계설비';
         if (cond1 || cond2) {
-            return { matched: true, priority: 15 };
+            // 종료신고일이 2014.05.22 이전이면 추가 서류 필요
+            const needsExtraDoc = 종료신고일 && 종료신고일 < '2014.05.22';
+            return { matched: true, priority: 15, needsExtraDoc: needsExtraDoc };
         }
     }
 
     // C1204: 보유건설업에 해당하는 직무분야로 수정
     if (rule.케이스ID === 'C1204') {
-        if (보유건설업 && 수정_직무분야) {
-            // 보유건설업과 직무분야 매칭 로직 (간단히 구현)
+        if (보유건설업 === '건축공사업' && 수정_직무분야 === '건축') {
+            // 건축공사업 → 건축 직무분야 매칭
+            return { matched: true, priority: 8 };
+        } else if (보유건설업 === '토목공사업' && 수정_직무분야 === '토목') {
+            // 토목공사업 → 토목 직무분야 매칭
             return { matched: true, priority: 8 };
         }
     }
@@ -574,7 +742,7 @@ function evaluateCondition(rule, career, modifications) {
             return { matched: true, priority: 12 };
         }
     }
-
+ 
     return { matched: false, priority: 0 };
 }
 
@@ -607,18 +775,20 @@ function renderStep4(content) {
         `;
 
         // 필수서류 필드들 찾기
-        for (let i = 1; i <= 4; i++) {
+        let docCount = 0;
+        for (let i = 1; i <= 6; i++) {
             const docField = `필수서류${i}`;
             const docName = rule[docField];
             
             if (docName && docName.trim() !== '') {
+                docCount++;
                 const fileId = `file-${i}`;
                 const uploadedFile = state.uploadedFiles[docName];
 
                 html += `
                     <div class="border border-gray-300 rounded-lg p-4">
                         <label class="block font-medium text-gray-700 mb-2">
-                            ${i}. ${docName}
+                            ${docCount}. ${docName}
                         </label>
                         <div class="flex items-center gap-3">
                             <input type="file" 
@@ -637,6 +807,37 @@ function renderStep4(content) {
                     </div>
                 `;
             }
+        }
+
+        // C1203 추가 서류 (종료신고일이 2014.05.22 이전)
+        if (state.needsExtraDoc) {
+            docCount++;
+            const extraDocName = '경력변경신고서 또는 경력증명서';
+            const fileId = `file-extra`;
+            const uploadedFile = state.uploadedFiles[extraDocName];
+
+            html += `
+                <div class="border border-orange-300 rounded-lg p-4 bg-orange-50">
+                    <label class="block font-medium text-orange-700 mb-2">
+                        ${docCount}. ${extraDocName}
+                        <span class="text-sm text-orange-600 ml-2">(종료신고일이 2014.05.22 이전)</span>
+                    </label>
+                    <div class="flex items-center gap-3">
+                        <input type="file" 
+                            id="${fileId}" 
+                            class="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                            onchange="handleFileUpload('${extraDocName}', '${fileId}')">
+                        <button onclick="removeFile('${extraDocName}', '${fileId}')" 
+                            class="px-3 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 ${uploadedFile ? '' : 'hidden'}" 
+                            id="${fileId}-remove">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div id="${fileId}-name" class="mt-2 text-sm text-green-600 ${uploadedFile ? '' : 'hidden'}">
+                        <i class="fas fa-check-circle mr-1"></i>${uploadedFile ? uploadedFile.name : ''}
+                    </div>
+                </div>
+            `;
         }
 
         html += `
@@ -837,6 +1038,7 @@ function resetApplication() {
     state.selectedCareer = null;
     state.modifiedFields = {};
     state.matchedRule = null;
+    state.needsExtraDoc = false;
     state.uploadedFiles = {};
     state.submissionData = null;
     
@@ -844,6 +1046,12 @@ function resetApplication() {
     
     // 버튼 이벤트 복원
     document.getElementById('btn-next').onclick = handleNext;
+}
+
+// 공통 유틸 함수1 (문자 포함 여부)
+function includesText(value, keyword) {
+    if (!value || !keyword) return false;
+    return value.includes(keyword);
 }
 
 // 모달 표시
