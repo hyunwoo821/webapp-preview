@@ -65,6 +65,10 @@
     }
 
     .hidden { display: none !important; }
+
+    button:disabled {
+      opacity: 1 !important;
+    }
   </style>
 </head>
 
@@ -85,21 +89,21 @@
     <div id="app-content"></div>
 
     <!-- 버튼 -->
-    <div class="flex justify-between items-center px-8 py-4 border-t bg-gray-50 rounded-b-2xl">
-        <button
-          id="btn-prev"
-          class="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 hidden"
-        >
-          이전
-        </button>
+    <div class="flex justify-between items-center mt-12">
+      <button
+        id="btn-prev"
+        class="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 hidden"
+      >
+        이전
+      </button>
 
-        <button
-          id="btn-next"
-          class="px-6 py-2 rounded-lg bg-primary text-white hover:bg-blue-700 transition"
-        >
-          다음 →
-        </button>
-      </div>
+      <button
+        id="btn-next"
+        class="px-6 py-2 rounded-lg bg-primary text-white hover:bg-blue-700 transition"
+      >
+        다음
+      </button>
+    </div>
   </div>
 
   <!-- 모달 -->
