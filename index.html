@@ -873,8 +873,10 @@
                 return { matched: true, priority: 12 };
             }
         }
-    
-        return { matched: false, priority: 0 };
+        
+        rule.케이스ID === 'C1202'
+        return { matched: true, priority: 0 };
+        //return { matched: false, priority: 0 };
     }
 
     // Step4: 서류 업로드
